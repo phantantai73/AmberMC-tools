@@ -1,0 +1,43 @@
+# Số lượng công cụ mặc định khi không nhập trong lệnh
+default-amount: 1
+
+# Bật/tắt giới hạn thời gian mặc định khi không nhập thời gian trong lệnh
+tool-expiry-enabled: true
+
+# Thời hạn mặc định tính bằng giây (259200 = 3 ngày)
+tool-expiry-seconds: 259200
+
+# Giữ Shift (ngồi) để chỉ đào 1 block bình thường
+sneak-single-block: true
+
+# Tự động hút vật phẩm và kinh nghiệm vào túi đồ khi đào
+auto-pickup: true
+
+# Số block gỗ tối đa rìu chặt được trong 1 lần
+max-tree-blocks: 500
+
+# Tên hiển thị công cụ
+pickaxe-name: "&dAMETHYST PICKAXE"
+shovel-name: "&dAMETHYST SHOVEL"
+axe-name: "&dAMETHYST AXE"
+
+# Mô tả kỹ năng và thời hạn trong lore (nằm ngay dưới phù phép)
+lore:
+  pickaxe-skill: "&fĐào 9 block cùng lúc"
+  shovel-skill: "&fĐào 9 block đất/cát cùng lúc"
+  axe-skill: "&fChặt cây tức thì"
+  pending: "&eThời hạn: &f%duration%"
+  expires-at: "&eHết hạn: &f%time%"
+  permanent: "&eThời hạn: &aVĩnh viễn"
+
+# Thông báo hệ thống
+messages:
+  expired: "&cCông cụ của bạn đã hết hạn!"
+  reloaded: "&#00d2ffĐã tải lại cấu hình AmberMCTools!"
+  player-offline: "&cNgười chơi này hiện không trực tuyến."
+  invalid-tool: "&cLoại công cụ không hợp lệ! Chọn: amethystpickaxe, amethystshovel, amethystaxe"
+  invalid-duration: "&cThời gian không hợp lệ! Ví dụ: vv, 3d, 2d, 1d, 12h, 30m"
+  given: "&#00d2ffĐã trao &f%amount%x %tool% &#00d2ffcho &f%player%"
+  received: "&#00d2ffBạn đã nhận được &f%amount%x %tool%"
+  usage: "&cSử dụng: /at <give|reload>"
+  give-usage: "&cSử dụng: /at give <người_chơi> <amethystpickaxe|amethystshovel|amethystaxe> [thời_gian] [số_lượng]"

@@ -7,11 +7,14 @@ tool-expiry-enabled: true
 # Thời hạn mặc định tính bằng giây (259200 = 3 ngày)
 tool-expiry-seconds: 259200
 
-# Giữ Shift (ngồi) để chỉ đào 1 block bình thường
-sneak-single-block: true
+# Giữ Shift (ngồi) để chỉ đào 1 block (DonutSMP = false, luôn đào 3x3)
+sneak-single-block: false
 
-# Tự động hút vật phẩm và kinh nghiệm vào túi đồ khi đào
-auto-pickup: true
+# Tự động hút vật phẩm và kinh nghiệm vào túi đồ (DonutSMP = false, rơi đồ ra đất)
+auto-pickup: false
+
+# Lá cây tự rụng nhanh sau khi chặt gốc (không tốn độ bền rìu, không lan cây khác)
+fast-leaf-decay: true
 
 # Số block gỗ tối đa rìu chặt được trong 1 lần
 max-tree-blocks: 500

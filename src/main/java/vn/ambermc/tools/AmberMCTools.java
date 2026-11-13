@@ -10,6 +10,7 @@ import org.bukkit.Sound;
 import org.bukkit.Tag;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.type.Leaves;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -39,6 +40,7 @@ import org.bukkit.util.RayTraceResult;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -47,10 +49,15 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class AmberMCTools extends JavaPlugin implements Listener, CommandExecutor, TabCompleter {
+
+    private static final BlockFace[] CARDINAL_FACES = {
+            BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.UP, BlockFace.DOWN
+    };
 
     private NamespacedKey toolTypeKey;
     private NamespacedKey expiresAtKey;
@@ -103,14 +110,14 @@ public final class AmberMCTools extends JavaPlugin implements Listener, CommandE
             return;
         }
 
-        if (getConfig().getBoolean("auto-pickup", true) && event.getExpToDrop() > 0) {
+        if (getConfig().getBoolean("auto-pickup", false) && event.getExpToDrop() > 0) {
             player.giveExp(event.getExpToDrop());
             event.setExpToDrop(0);
         }
 
         if (breakingGuard.contains(player.getUniqueId())) return;
 
-        if (getConfig().getBoolean("sneak-single-block", true) && player.isSneaking()) {
+        if (getConfig().getBoolean("sneak-single-block", false) && player.isSneaking()) {
             return;
         }
 
@@ -129,7 +136,7 @@ public final class AmberMCTools extends JavaPlugin implements Listener, CommandE
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockDropItem(BlockDropItemEvent event) {
-        if (!getConfig().getBoolean("auto-pickup", true)) return;
+        if (!getConfig().getBoolean("auto-pickup", false)) return;
 
         Player player = event.getPlayer();
         ItemStack tool = player.getInventory().getItemInMainHand();
@@ -302,16 +309,46 @@ public final class AmberMCTools extends JavaPlugin implements Listener, CommandE
             face = ray.getHitBlockFace();
         }
 
+        if (face == BlockFace.UP || face == BlockFace.DOWN) {
+            BlockFace facing = player.getFacing();
+            boolean alongX = (facing != BlockFace.EAST && facing != BlockFace.WEST);
+            int yDir = (face == BlockFace.UP) ? -1 : 1;
+
+            for (int w = -1; w <= 1; w++) {
+                for (int d = 0; d <= 2; d++) {
+                    if (w == 0 && d == 0) continue;
+                    if (player.getInventory().getItemInMainHand().getType().isAir()) return;
+
+                    int dx = alongX ? w : 0;
+                    int dz = alongX ? 0 : w;
+                    int dy = d * yDir;
+
+                    Block target = origin.getRelative(dx, dy, dz);
+                    if (isValidAreaBlock(target, type)) {
+                        player.breakBlock(target);
+                    }
+                }
+            }
+            return;
+        }
+
+        int minYOffset = -1;
+        int maxYOffset = 1;
+        int playerFootY = player.getLocation().getBlockY();
+        if (origin.getY() <= playerFootY) {
+            minYOffset = 0;
+            maxYOffset = 2;
+        }
+
         for (int a = -1; a <= 1; a++) {
-            for (int b = -1; b <= 1; b++) {
+            for (int b = minYOffset; b <= maxYOffset; b++) {
                 if (a == 0 && b == 0) continue;
                 if (player.getInventory().getItemInMainHand().getType().isAir()) return;
 
                 Block target = switch (face) {
-                    case UP, DOWN -> origin.getRelative(a, 0, b);
                     case NORTH, SOUTH -> origin.getRelative(a, b, 0);
                     case EAST, WEST -> origin.getRelative(0, b, a);
-                    default -> origin.getRelative(a, 0, b);
+                    default -> origin.getRelative(a, b, 0);
                 };
 
                 if (isValidAreaBlock(target, type)) {
@@ -341,13 +378,15 @@ public final class AmberMCTools extends JavaPlugin implements Listener, CommandE
         int maxBlocks = Math.max(1, getConfig().getInt("max-tree-blocks", 500));
         Queue<Block> queue = new ArrayDeque<>();
         Set<Block> visited = new HashSet<>();
+        Set<Block> brokenLogs = new HashSet<>();
 
         queue.add(origin);
         visited.add(origin);
+        brokenLogs.add(origin);
         int broken = 1;
 
         while (!queue.isEmpty() && broken < maxBlocks) {
-            if (player.getInventory().getItemInMainHand().getType().isAir()) return;
+            if (player.getInventory().getItemInMainHand().getType().isAir()) break;
             Block current = queue.poll();
 
             for (int dx = -1; dx <= 1; dx++) {
@@ -362,13 +401,114 @@ public final class AmberMCTools extends JavaPlugin implements Listener, CommandE
 
                         if (Tag.LOGS.isTagged(neighbor.getType())) {
                             queue.add(neighbor);
-                            player.breakBlock(neighbor);
-                            broken++;
+                            if (player.breakBlock(neighbor)) {
+                                brokenLogs.add(neighbor);
+                                broken++;
+                            }
                         }
                     }
                 }
             }
         }
+
+        if (getConfig().getBoolean("fast-leaf-decay", true)) {
+            Bukkit.getScheduler().runTaskLater(this, () -> scheduleFastLeafDecay(player, brokenLogs), 2L);
+        }
+    }
+
+    private void scheduleFastLeafDecay(Player player, Set<Block> brokenLogs) {
+        Map<Block, Integer> leafDistances = new HashMap<>();
+        Queue<Block> queue = new ArrayDeque<>();
+
+        for (Block log : brokenLogs) {
+            for (BlockFace face : CARDINAL_FACES) {
+                Block adj = log.getRelative(face);
+                if (isNaturalLeaf(adj) && !leafDistances.containsKey(adj)) {
+                    leafDistances.put(adj, 1);
+                    queue.add(adj);
+                }
+            }
+        }
+
+        while (!queue.isEmpty()) {
+            Block current = queue.poll();
+            int dist = leafDistances.get(current);
+            if (dist >= 6) continue;
+
+            for (BlockFace face : CARDINAL_FACES) {
+                Block next = current.getRelative(face);
+                if (isNaturalLeaf(next) && !leafDistances.containsKey(next)) {
+                    leafDistances.put(next, dist + 1);
+                    queue.add(next);
+                }
+            }
+        }
+
+        if (leafDistances.isEmpty()) return;
+
+        Set<Block> candidateLeaves = leafDistances.keySet();
+        Map<Block, Integer> supportedDistances = new HashMap<>();
+        Queue<Block> supportQueue = new ArrayDeque<>();
+
+        for (Block leaf : candidateLeaves) {
+            for (BlockFace face : CARDINAL_FACES) {
+                Block adj = leaf.getRelative(face);
+                if (Tag.LOGS.isTagged(adj.getType())) {
+                    supportedDistances.put(leaf, 1);
+                    supportQueue.add(leaf);
+                    break;
+                }
+            }
+        }
+
+        while (!supportQueue.isEmpty()) {
+            Block current = supportQueue.poll();
+            int dist = supportedDistances.get(current);
+            if (dist >= 6) continue;
+
+            for (BlockFace face : CARDINAL_FACES) {
+                Block next = current.getRelative(face);
+                if (candidateLeaves.contains(next) && !supportedDistances.containsKey(next)) {
+                    supportedDistances.put(next, dist + 1);
+                    supportQueue.add(next);
+                }
+            }
+        }
+
+        boolean autoPickup = getConfig().getBoolean("auto-pickup", false);
+        ItemStack bareHand = new ItemStack(Material.AIR);
+
+        for (Block leaf : candidateLeaves) {
+            if (supportedDistances.containsKey(leaf)) continue;
+
+            long delay = ThreadLocalRandom.current().nextLong(1L, 22L);
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                if (!isNaturalLeaf(leaf)) return;
+
+                Collection<ItemStack> drops = leaf.getDrops(bareHand);
+                leaf.setType(Material.AIR, false);
+
+                for (ItemStack drop : drops) {
+                    if (drop == null || drop.getType().isAir()) continue;
+                    if (autoPickup && player.isOnline()) {
+                        Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
+                        for (ItemStack rem : leftover.values()) {
+                            player.getWorld().dropItemNaturally(player.getLocation(), rem);
+                        }
+                    } else {
+                        leaf.getWorld().dropItemNaturally(leaf.getLocation().add(0.5, 0.5, 0.5), drop);
+                    }
+                }
+            }, delay);
+        }
+    }
+
+    private boolean isNaturalLeaf(Block block) {
+        if (!Tag.LEAVES.isTagged(block.getType())) return false;
+        if (block.getBlockData() instanceof Leaves leavesData) {
+            return !leavesData.isPersistent();
+        }
+        return true;
     }
 
     private ItemStack createTool(String type, int amount, long durationSeconds, boolean pendingForOp) {

@@ -1,0 +1,14 @@
+name: AmberMCTools
+version: 1.21.11
+main: vn.ambermc.tools.AmberMCTools
+api-version: '1.21'
+commands:
+  ambermctools:
+    description: Quản lý bộ công cụ Thạch Anh Tím AmberMC
+    aliases: [at, atools, amctools]
+    usage: /at <give|reload>
+    permission: ambermctools.admin
+permissions:
+  ambermctools.admin:
+    description: Quyền cấp công cụ và tải lại cấu hình
+    default: op
